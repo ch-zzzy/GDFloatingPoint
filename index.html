@@ -15,6 +15,7 @@
 
   <label>Distance: <input id="distance" value="100" /></label>
   <label>Velocity: <input id="velocity" value="10" /></label>
+  <label>TPS: <input id="tps" value="" /></label>
   <button id="calc">Calculate</button>
 
   <pre id="out"></pre>
@@ -43,35 +44,88 @@
       return Number(n).toPrecision(17);
     }
 
-    document.getElementById('calc').addEventListener('click', () => {
+    function updateInputsAndCalc() {
       const dRaw = document.getElementById('distance').value.trim();
       const vRaw = document.getElementById('velocity').value.trim();
+      const tRaw = document.getElementById('tps').value.trim();
       const d = Number(dRaw);
       const v = Number(vRaw);
+      const t = Number(tRaw);
 
-      if (!Number.isFinite(d) || !Number.isFinite(v)) {
-        document.getElementById('out').textContent = 'Please enter finite numeric values.';
-        return;
-      }
+      const hasD = dRaw !== '' && Number.isFinite(d);
+      const hasV = vRaw !== '' && Number.isFinite(v);
+      const hasT = tRaw !== '' && Number.isFinite(t);
 
-      const dFloat = Math.fround(d);
-      const vFloat = Math.fround(v);
-      const u = ulp32(dFloat);
+      if (hasD && hasV && !hasT) {
+        const dFloat = Math.fround(d);
+        const vFloat = Math.fround(v);
+        const u = ulp32(dFloat);
 
-      if (!Number.isFinite(u) || u <= 0) {
-        document.getElementById('out').textContent = 'Invalid ULP computed for the given distance.';
-        return;
-      }
+        if (!Number.isFinite(u) || u <= 0) {
+          document.getElementById('out').textContent = 'Invalid ULP computed for the given distance.';
+          return;
+        }
 
-      const min = (2.0 / u) * vFloat + FLOAT32_MIN_POSITIVE;
-      const max = (4.0 / u) * vFloat;
+        const min = (2.0 / u) * vFloat + FLOAT32_MIN_POSITIVE;
+        const max = (4.0 / u) * vFloat;
 
-      document.getElementById('out').textContent =
+        document.getElementById('tps').value = formatNum((min + max) / 2);
+
+        document.getElementById('out').textContent =
 `distance (float32): ${dFloat}
 ulp (float32): ${formatNum(u)}
 velocity (float32): ${vFloat}
 Minimum tps to freeze: ${formatNum(min)}
 Maximum tps to freeze: ${formatNum(max)}`;
+      } else if (hasD && hasT && !hasV) {
+        const dFloat = Math.fround(d);
+        const u = ulp32(dFloat);
+
+        if (!Number.isFinite(u) || u <= 0) {
+          document.getElementById('out').textContent = 'Invalid ULP computed for the given distance.';
+          return;
+        }
+
+        const vFloat = (t - FLOAT32_MIN_POSITIVE) * u / 2.0;
+
+        document.getElementById('velocity').value = formatNum(vFloat);
+
+        document.getElementById('out').textContent =
+`distance (float32): ${dFloat}
+ulp (float32): ${formatNum(u)}
+tps: ${t}
+velocity (float32): ${formatNum(vFloat)}`;
+      } else if (hasV && hasT && !hasD) {
+        const vFloat = Math.fround(v);
+        const targetUlp = 2.0 * vFloat / (t - FLOAT32_MIN_POSITIVE);
+
+        let dFloat;
+        if (targetUlp <= FLOAT32_MIN_POSITIVE) {
+          dFloat = FLOAT32_MIN_POSITIVE;
+        } else {
+          dFloat = targetUlp * Math.pow(2, 23);
+          dFloat = Math.max(FLOAT32_MIN_POSITIVE, Math.min(dFloat, Number.MAX_VALUE));
+          dFloat = Math.fround(dFloat);
+        }
+
+        const u = ulp32(dFloat);
+
+        document.getElementById('distance').value = formatNum(dFloat);
+
+        document.getElementById('out').textContent =
+`velocity (float32): ${vFloat}
+tps: ${t}
+distance (float32): ${formatNum(dFloat)}
+ulp (float32): ${formatNum(u)}`;
+      } else {
+        document.getElementById('out').textContent = 'Please enter exactly two values.';
+      }
+    }
+
+    document.getElementById('calc').addEventListener('click', updateInputsAndCalc);
+
+    ['distance', 'velocity', 'tps'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updateInputsAndCalc);
     });
 
     // show user-friendly message and log error
