@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ulp TPS Calculator</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; line-height: 1.5; }
+    label { display:block; margin: 0.5rem 0; }
+    input { width: 10rem; }
+    pre { background:#f6f8fa; padding: 1rem; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Ulp TPS Calculator (browser)</h1>
+
+  <label>Distance: <input id="distance" value="100" /></label>
+  <label>Velocity: <input id="velocity" value="10" /></label>
+  <button id="calc">Calculate</button>
+
+  <pre id="out"></pre>
+
+  <script>
+    // Small helper values for float32
+    const FLOAT32_MIN_POSITIVE = 1.401298464324817e-45; // smallest positive float32 subnormal
+
+    function ulp32(distance) {
+      const f = Math.fround(distance);
+      if (!Number.isFinite(f)) return NaN;
+      if (f <= 0) return FLOAT32_MIN_POSITIVE;
+
+      const buf = new ArrayBuffer(4);
+      const dv = new DataView(buf);
+      dv.setFloat32(0, f, true);                 // little-endian to match BitConverter.GetBytes
+      let bits = dv.getInt32(0, true);          // interpret bits as signed int32 like the C# code
+      let nextBits = bits + 1;
+      dv.setInt32(0, nextBits, true);
+      const next = dv.getFloat32(0, true);
+      return next - f;
+    }
+
+    function formatNum(n) {
+      if (!Number.isFinite(n)) return String(n);
+      // Use 17 significant digits for double-ish display similar to "G17"
+      return Number(n).toPrecision(17);
+    }
+
+    document.getElementById('calc').addEventListener('click', () => {
+      const dRaw = document.getElementById('distance').value.trim();
+      const vRaw = document.getElementById('velocity').value.trim();
+      const d = Number(dRaw);
+      const v = Number(vRaw);
+
+      if (!Number.isFinite(d) || !Number.isFinite(v)) {
+        document.getElementById('out').textContent = 'Please enter finite numeric values.';
+        return;
+      }
+
+      const dFloat = Math.fround(d);
+      const vFloat = Math.fround(v);
+      const u = ulp32(dFloat);
+
+      if (!Number.isFinite(u) || u <= 0) {
+        document.getElementById('out').textContent = 'Invalid ULP computed for the given distance.';
+        return;
+      }
+
+      const min = (2.0 / u) * vFloat + FLOAT32_MIN_POSITIVE;
+      const max = (4.0 / u) * vFloat;
+
+      document.getElementById('out').textContent =
+`distance (float32): ${dFloat}
+ulp (float32): ${formatNum(u)}
+velocity (float32): ${vFloat}
+Minimum tps to freeze: ${formatNum(min)}
+Maximum tps to freeze: ${formatNum(max)}`;
+    });
+
+    // show user-friendly message and log error
+    window.addEventListener('error', function (e) {
+      console.error('Unhandled error', e.error || e.message, e);
+      const out = document.getElementById('out');
+      if (out) out.textContent = 'An error occurred — check console for details.';
+      // prevent default browser handler if desired: e.preventDefault();
+    });
+
+    window.addEventListener('unhandledrejection', function (e) {
+      console.error('Unhandled promise rejection', e.reason);
+      const out = document.getElementById('out');
+      if (out) out.textContent = 'An error occurred — check console for details.';
+    });
+  </script>
+</body>
+</html>
