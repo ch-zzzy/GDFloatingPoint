@@ -124,11 +124,7 @@ ulp (float32): ${formatNum(u)}`;
 
     document.getElementById('calc').addEventListener('click', updateInputsAndCalc);
 
-    ['distance', 'velocity', 'tps'].forEach(id => {
-      document.getElementById(id).addEventListener('input', updateInputsAndCalc);
-    });
-
-    // show user-friendly message and log error
+    
     window.addEventListener('error', function (e) {
       console.error('Unhandled error', e.error || e.message, e);
       const out = document.getElementById('out');
